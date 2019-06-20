@@ -1,4 +1,4 @@
-// Last Update:2019-06-20 11:09:16
+// Last Update:2019-06-20 12:20:41
 /**
  * @file memchk.c
  * @brief 
@@ -7,11 +7,13 @@
  * @date 2019-06-19
  */
 
-//#define __USE_GNU
+#include <stdio.h>
+#include <unistd.h>
+#define __USE_GNU
 #include <dlfcn.h>
 #include <sys/syscall.h>
-#include <signal.h>
 #include <stdio.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <malloc.h>
 #include <pthread.h>
@@ -23,7 +25,7 @@
 
 #define MAX_BLOCK_PER_CALLER (100)
 #define MAX_CALLER_LIST (20000)
-#define GET_LR  __asm__ volatile("mov %0,lr" :"=r"(lr)::"lr");
+#define GET_LR  __asm__ volatile("mov %0,lr" :"=r"(lr)::"lr")
 
 typedef void *(*malloc_ptr) (size_t size);
 typedef void (*free_ptr) (void *ptr);
@@ -65,7 +67,7 @@ static void sig_hanlder( int signo )
             mem_caller = &caller_list[i]; 
             for ( j=0; j<MAX_BLOCK_PER_CALLER; j++ ) {
                if ( mem_caller->blocks[j].used ) {
-                   printf("\t\t%d@%p\n", mem_caller->blocks[j].size, mem_caller->blocks[j], mem_caller->blocks[i].addr );
+                   printf("\t\t%ld@%p\n", mem_caller->blocks[j].size,  mem_caller->blocks[i].addr );
                }
             }
         }
@@ -121,7 +123,7 @@ void *malloc( size_t size )
     if ( real_malloc )
         ptr = real_malloc( size );
 
-    record_block( ptr, size, lr );
+    record_block( ptr, size, (void *)lr );
 
     return ptr;
         
@@ -132,7 +134,7 @@ mem_caller_t *find_caller( void *caller )
     int i = 0;
 
     for ( i=0; i<MAX_CALLER_LIST; i++ ) {
-        if ( caller_list[i].caler == caller ) {
+        if ( caller_list[i].caller == caller ) {
             return &caller_list[i];
         }
     }
@@ -185,7 +187,7 @@ void free(void *ptr)
     if ( real_free )
         real_free( ptr );
 
-    delete_block( ptr, lr );
+    delete_block( ptr, (void *)lr );
 }
 
 
@@ -198,7 +200,7 @@ void *calloc(size_t nmemb, size_t size)
 
     if ( real_calloc )
         ptr = real_calloc( nmemb, size );
-    record_block( ptr, size, lr );
+    record_block( ptr, size, (void *)lr );
 
     return ptr;
 }
@@ -213,8 +215,8 @@ void *realloc(void *ptr, size_t size)
     if ( real_realloc )
         p = real_realloc( ptr, size );
 
-    delete_block( ptr );
-    record_block( p );
+    delete_block( ptr, (void*)lr );
+    record_block( p, size, (void*)lr );
 
     return p;
 }
