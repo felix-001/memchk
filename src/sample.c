@@ -1,4 +1,4 @@
-// Last Update:2019-06-20 14:34:29
+// Last Update:2019-06-20 18:28:40
 /**
  * @file sample.c
  * @brief 
@@ -43,20 +43,28 @@ void delete( void *ptr )
     free( ptr );
 }
 
+#define MAX_LEN 10
+
 int main()
 {
     int i = 0;
-    void *list[100] = { 0 };
-    void *mem[100] = { 0 };
+    void *list[MAX_LEN] = { 0 };
+    void *mem[MAX_LEN] = { 0 };
 
     LOGI("running...\n");
+    LOGI("my_malloc addr : %p\n", my_malloc );
+    LOGI("my_free addr : %p\n", my_free );
+    LOGI("new : %p\n", new );
+    LOGI("delete : %p\n", delete );
 
-    for ( i=0; i<100; i++ ) {
+    for ( i=0; i<MAX_LEN; i++ ) {
         list[i] = my_malloc( 50 );
+        LOGI("list[%d] = %p\n", i, list[i] );
         mem[i] = new( 20 );
+        LOGI("mem[%d] = %p\n", i, mem[i] );
     }
 
-    for ( i=0; i<80; i++ ) {
+    for ( i=0; i<MAX_LEN-5; i++ ) {
         my_free(list[i] );
         delete( mem[i] );
     }
