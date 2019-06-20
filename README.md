@@ -6,7 +6,7 @@
 - mkdir build
 - cd build
 - cmake ..
-- makee
+- make
 
 # 使用
 - 将sample拷贝到开发板某个路径下
