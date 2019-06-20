@@ -14,6 +14,6 @@ endif()
 include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/src )
 aux_source_directory( ${CMAKE_CURRENT_SOURCE_DIR}/src DIR_SRCS)
 add_library(  ${APPNAME}  SHARED ${CMAKE_CURRENT_SOURCE_DIR}/src/memchk.c )
+target_link_libraries( ${APPNAME} dl )
 
 add_executable( sample ${CMAKE_CURRENT_SOURCE_DIR}/src/sample.c )
-target_link_libraries( ${APPNAME} )
