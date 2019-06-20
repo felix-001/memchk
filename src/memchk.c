@@ -1,4 +1,4 @@
-// Last Update:2019-06-19 21:05:45
+// Last Update:2019-06-20 11:09:16
 /**
  * @file memchk.c
  * @brief 
@@ -7,7 +7,7 @@
  * @date 2019-06-19
  */
 
-#define __USE_GNU
+//#define __USE_GNU
 #include <dlfcn.h>
 #include <sys/syscall.h>
 #include <signal.h>
@@ -52,6 +52,24 @@ static pthread_mutex_t mutex;
 
 static void sig_hanlder( int signo )
 {
+    int i = 0, j = 0;
+    mem_caller_t *mem_caller = NULL;
+
+    if ( signo != SIGUSR1 )
+        return;
+
+    LOGI("dump all leak memory:\n");
+    for ( i=0; i<MAX_CALLER_LIST; i++ ) {
+        if ( caller_list[i].number > 0 ) {
+            printf("\tcaller : %p number leak: %d\n", caller_list[i].caller, caller_list[i].number );
+            mem_caller = &caller_list[i]; 
+            for ( j=0; j<MAX_BLOCK_PER_CALLER; j++ ) {
+               if ( mem_caller->blocks[j].used ) {
+                   printf("\t\t%d@%p\n", mem_caller->blocks[j].size, mem_caller->blocks[j], mem_caller->blocks[i].addr );
+               }
+            }
+        }
+    }
 }
 
 mem_block_t *get_empty_block( mem_caller_t *mem_caller )
@@ -76,12 +94,15 @@ void record_block( void *ptr, size_t size, void *caller )
     pthread_mutex_lock( &mutex );
     if ( caller_index >= MAX_CALLER_LIST ) {
         LOGE("error, caller list full\n");
+        pthread_mutex_unlock( &mutex );
         return;
     }
     mem_caller = &caller_list[caller_index++];
     block = get_empty_block( mem_caller );
-    if ( !block )
+    if ( !block ) {
+        pthread_mutex_unlock( &mutex );
         return;
+    }
     block->addr = ptr;
     block->size = size;
     block->used = 1;
@@ -139,13 +160,20 @@ void delete_block( void *ptr, void *caller )
     mem_caller_t *mem_caller = NULL;
     mem_block_t *block = NULL;
 
+    pthread_mutex_lock( &mutex );
     mem_caller = find_caller( caller );
-    if ( !mem_caller )
+    if ( !mem_caller ) {
+        pthread_mutex_unlock( &mutex );
         return;
+    }
     block = find_block( mem_caller, ptr );
-    if ( !block )
+    if ( !block ) {
+        pthread_mutex_unlock( &mutex );
         return;
+    }
     block->used = 0;
+    mem_caller->number--;
+    pthread_mutex_unlock( &mutex );
 }
 
 void free(void *ptr)
@@ -160,6 +188,38 @@ void free(void *ptr)
     delete_block( ptr, lr );
 }
 
+
+void *calloc(size_t nmemb, size_t size)
+{
+    void *ptr = NULL;
+    unsigned long lr;
+
+    GET_LR;
+
+    if ( real_calloc )
+        ptr = real_calloc( nmemb, size );
+    record_block( ptr, size, lr );
+
+    return ptr;
+}
+
+void *realloc(void *ptr, size_t size)
+{
+    void *p = NULL;
+    unsigned long lr;
+
+    GET_LR;
+
+    if ( real_realloc )
+        p = real_realloc( ptr, size );
+
+    delete_block( ptr );
+    record_block( p );
+
+    return p;
+}
+
+
 void __attribute__ ((constructor)) memchk_load()
 {
     real_malloc = dlsym( RTLD_NEXT, "malloc" );
@@ -173,3 +233,4 @@ void __attribute__ ((constructor)) memchk_load()
     LOGI("PreLoad Init Success, BuildTime: %s %s\r\n", __DATE__, __TIME__ );
     LOGI("killall -USR1 app to show leak info\n");
 }
+
