@@ -1,4 +1,4 @@
-// Last Update:2019-06-24 21:09:29
+// Last Update:2019-06-24 21:10:25
 /**
  * @file memchk.c
  * @brief 
@@ -284,29 +284,15 @@ void *realloc(void *ptr, size_t size)
 
 void __attribute__ ((constructor)) memchk_load()
 {
-    LOGI("memory check loaded\n");
     INIT_LIST_HEAD( &mem_caller_list );
-    LOGI("call dlsyn\n");
-    LOGI(":-D\n");
-    LOGI(":-D\n");
-    LOGI(":-D\n");
-    LOGI(":-D\n");
-    LOGI(":-D\n");
-    LOGI(":-D\n");
     real_malloc = dlsym( RTLD_NEXT, "malloc" );
-    LOGI(":-D\n");
     real_calloc = dlsym( RTLD_NEXT, "calloc" );
-    LOGI(":-D\n");
     real_free   = dlsym( RTLD_NEXT, "free" );
-    LOGI(":-D\n");
     real_realloc = dlsym( RTLD_NEXT, "realloc" );
-    LOGI(":-D\n");
 
     INIT_LIST_HEAD( &mem_caller_list );
-    LOGI(":-D\n");
 
     signal( SIGUSR1, &sig_hanlder );
-    LOGI(":-D\n");
 
     pthread_mutex_init( &mutex, NULL );
     LOGI("PreLoad Init Success, BuildTime: %s %s\r\n", __DATE__, __TIME__ );
