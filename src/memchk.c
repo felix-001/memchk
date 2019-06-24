@@ -1,4 +1,4 @@
-// Last Update:2019-06-24 21:10:25
+// Last Update:2019-06-24 21:11:42
 /**
  * @file memchk.c
  * @brief 
@@ -83,10 +83,10 @@ static void sig_hanlder( int signo )
         return;
     }
 
-    printf("dump all leak memory(%d callers %d blocks total : %dbytes ):\n", caller_index, total_blocks, total_size );
+    printf("dump all leak memory(%d callers %d blocks total : %d bytes ):\n", caller_index, total_blocks, total_size );
     pthread_mutex_lock( &mutex );
     list_for_each_entry( mem_caller, &mem_caller_list, list ) {
-        if ( mem_caller  && mem_caller->number > 1 ) {
+        if ( mem_caller  && mem_caller->number > 0 ) {
             printf("\tcaller : %p number leak: %d, total size : %d bytes\n",
                    mem_caller->caller, mem_caller->number, mem_caller->total_size );
             list_for_each_entry( block, &mem_caller->block_list, list ) {
