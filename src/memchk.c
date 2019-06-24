@@ -1,4 +1,4 @@
-// Last Update:2019-06-20 18:25:00
+// Last Update:2019-06-24 14:43:02
 /**
  * @file memchk.c
  * @brief 
@@ -17,14 +17,15 @@
 #include <stdlib.h>
 #include <malloc.h>
 #include <pthread.h>
-#include "memchk.h"
+#include <string.h>
+#include "list.h"
 
 #define BASIC() printf("[ %s %s() +%d ] ", __FILE__, __FUNCTION__, __LINE__ )
 #define LOGI(args...) BASIC();printf(args)
 #define LOGE(args...) LOGI(args)
 
 #define MAX_BLOCK_PER_CALLER (100)
-#define MAX_CALLER_LIST (20000)
+#define MAX_CALLER_LIST ( 3000 )
 #define GET_LR  __asm__ volatile("mov %0,lr" :"=r"(lr)::"lr")
 
 typedef void *(*malloc_ptr) (size_t size);
@@ -36,19 +37,21 @@ typedef struct {
     void *addr;
     size_t size;
     int used;
+    struct list_head list;
 } mem_block_t;
 
 typedef struct {
-    mem_block_t blocks[MAX_BLOCK_PER_CALLER];
+    mem_block_t blocks;
     int number;
     void *caller;
+    struct list_head list;
 } mem_caller_t;
 
 static malloc_ptr real_malloc = NULL;
 static free_ptr real_free = NULL;
 static realloc_ptr real_realloc = NULL;
 static calloc_ptr real_calloc = NULL;
-static mem_caller_t caller_list[MAX_CALLER_LIST];
+static mem_caller_t mem_caller_list;
 static int caller_index;
 static pthread_mutex_t mutex;
 
@@ -58,36 +61,22 @@ static void sig_hanlder( int signo )
 {
     int i = 0, j = 0;
     mem_caller_t *mem_caller = NULL;
+    mem_block_t *block = NULL;
 
     if ( signo != SIGUSR1 )
         return;
 
-    printf("dump all leak memory:\n");
-    for ( i=0; i<MAX_CALLER_LIST; i++ ) {
-        if ( caller_list[i].number > 0 ) {
-            printf("\tcaller : %p number leak: %d\n", caller_list[i].caller, caller_list[i].number );
-            mem_caller = &caller_list[i]; 
-            for ( j=0; j<MAX_BLOCK_PER_CALLER; j++ ) {
-               if ( mem_caller->blocks[j].used ) {
-                   printf("\t\t%ld@%p\n", mem_caller->blocks[j].size,  mem_caller->blocks[j].addr );
-               }
+    printf("dump all leak memory(%d callers):\n", caller_index );
+    list_for_each_entry( mem_caller, &mem_caller_list.list, list ) {
+        if ( mem_caller ) {
+            printf("\tcaller : %p number leak: %d\n", mem_caller->caller, mem_caller->number );
+            list_for_each_entry( block, &mem_caller->blocks.list, list ) {
+                if ( block ) {
+                   printf("\t\t%ld@%p\n", block->size, block->addr );
+                }
             }
         }
     }
-}
-
-mem_block_t *get_empty_block( mem_caller_t *mem_caller )
-{
-    int i = 0;
-
-    for ( i=0; i<MAX_BLOCK_PER_CALLER; i++ ) {
-        if ( !(mem_caller->blocks[i].used) ) {
-            return &(mem_caller->blocks[i]);
-        }
-    }
-
-    LOGE("error, block list full\n");
-    return NULL;
 }
 
 void record_block( void *ptr, size_t size, void *caller )
@@ -101,23 +90,31 @@ void record_block( void *ptr, size_t size, void *caller )
         pthread_mutex_unlock( &mutex );
         return;
     }
-    if ( caller_index > 0 ) {
-        mem_caller = find_caller( caller );
-        if ( !mem_caller )
-            mem_caller = &caller_list[caller_index++];
-    } else {
-        mem_caller = &caller_list[caller_index++];
+
+    mem_caller = find_caller( caller );
+    if ( !mem_caller ) {
+        mem_caller = (mem_caller_t *)real_malloc( sizeof(mem_caller_t) );
+        if ( !mem_caller ) {
+            pthread_mutex_unlock( &mutex );
+            return;
+        }
+        list_add_tail( &mem_caller->list, &mem_caller_list.list );
+        memset( mem_caller, 0, sizeof(mem_caller_t) );
+        caller_index++;
     }
+    LOGI("caller_index = %d\n", caller_index );
     mem_caller->caller = caller;
-    block = get_empty_block( mem_caller );
+    block = (mem_block_t*)real_malloc( sizeof(mem_block_t) );
     if ( !block ) {
         pthread_mutex_unlock( &mutex );
         return;
     }
+    memset( block, 0, sizeof(mem_block_t) );
     block->addr = ptr;
     block->size = size;
     block->used = 1;
     mem_caller->number ++;
+    list_add_tail( &block->list, &mem_caller->blocks.list );
     pthread_mutex_unlock( &mutex );
 }
 
@@ -145,6 +142,7 @@ void *malloc( size_t size )
         ptr = real_malloc( size );
 
     record_block( ptr, size, (void *)lr );
+    LOGI("return\n");
 
     return ptr;
         
@@ -153,23 +151,11 @@ void *malloc( size_t size )
 mem_caller_t *find_caller( void *caller )
 {
     int i = 0;
+    mem_caller_t *mem_caller = NULL;
 
-    for ( i=0; i<MAX_CALLER_LIST; i++ ) {
-        if ( caller_list[i].caller == caller ) {
-            return &caller_list[i];
-        }
-    }
-
-    return NULL;
-}
-
-mem_block_t *find_block( mem_caller_t *mem_caller, void *ptr )
-{
-    int i = 0;
-
-    for ( i=0; i<MAX_BLOCK_PER_CALLER; i++ ) {
-        if ( (mem_caller->blocks[i].used) && ((mem_caller->blocks[i].addr) == ptr) ) {
-            return &(mem_caller->blocks[i]);
+    list_for_each_entry( mem_caller, &mem_caller_list.list, list ) {
+        if ( mem_caller && mem_caller->caller == caller ) {
+            return mem_caller;
         }
     }
 
@@ -180,24 +166,23 @@ void delete_block( void *ptr, void *caller )
 {
     mem_caller_t *mem_caller = NULL;
     mem_block_t *block = NULL;
-    int i = 0;
 
     pthread_mutex_lock( &mutex );
-    for ( i=0; i<MAX_CALLER_LIST; i++ ) {
-        mem_caller = &caller_list[i];
-        block = find_block( mem_caller, ptr );
-        if ( !block ) {
-            pthread_mutex_unlock( &mutex );
-            continue;
+    list_for_each_entry( mem_caller, &mem_caller_list.list, list ) {
+        if ( mem_caller ) {
+            list_for_each_entry( block, &mem_caller->blocks.list, list ) {
+                if ( block ) {
+                    list_del( &block->list );
+                    real_free( block );
+                    pthread_mutex_unlock( &mutex );
+                    return;
+                }
+            }
         }
-        block->used = 0;
-        mem_caller->number--;
-        break;
     }
-    if ( i == MAX_CALLER_LIST ) {
-        LOGE("can't find block\n");
-    }
+    LOGE("!!! error not found block\n");
     pthread_mutex_unlock( &mutex );
+
 }
 
 void free(void *ptr)
@@ -250,6 +235,8 @@ void __attribute__ ((constructor)) memchk_load()
     real_calloc = dlsym( RTLD_NEXT, "calloc" );
     real_free   = dlsym( RTLD_NEXT, "free" );
     real_realloc = dlsym( RTLD_NEXT, "realloc" );
+
+    INIT_LIST_HEAD( &mem_caller_list.list );
 
     signal( SIGUSR1, &sig_hanlder );
 
