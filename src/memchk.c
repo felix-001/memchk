@@ -1,4 +1,4 @@
-// Last Update:2019-06-24 21:02:23
+// Last Update:2019-06-24 21:09:29
 /**
  * @file memchk.c
  * @brief 
@@ -63,6 +63,7 @@ static struct list_head mem_caller_list;
 static int caller_index;
 static pthread_mutex_t mutex;
 static int total_blocks = 0;
+static int total_size = 0;
 
 mem_caller_t *find_caller( void *caller );
 
@@ -82,18 +83,20 @@ static void sig_hanlder( int signo )
         return;
     }
 
-    printf("dump all leak memory(%d callers %d blocks):\n", caller_index, total_blocks );
+    printf("dump all leak memory(%d callers %d blocks total : %dbytes ):\n", caller_index, total_blocks, total_size );
+    pthread_mutex_lock( &mutex );
     list_for_each_entry( mem_caller, &mem_caller_list, list ) {
         if ( mem_caller  && mem_caller->number > 1 ) {
             printf("\tcaller : %p number leak: %d, total size : %d bytes\n",
                    mem_caller->caller, mem_caller->number, mem_caller->total_size );
             list_for_each_entry( block, &mem_caller->block_list, list ) {
                 if ( block ) {
-                   printf("\t\t%ld@%p\n", block->size, block->addr );
+                    printf("\t\t%ld@%p\n", block->size, block->addr );
                 }
             }
         }
     }
+    pthread_mutex_unlock( &mutex );
     DBG_TRACE_FUNC_OUT();
 }
 
@@ -138,6 +141,7 @@ void record_block( void *ptr, size_t size, void *caller )
     block->addr = ptr;
     block->size = size;
     mem_caller->total_size += block->size;
+    total_size += block->size;
     mem_caller->number ++;
     total_blocks++;
     list_add_tail( &(block->list), &(mem_caller->block_list) );
@@ -215,6 +219,7 @@ void delete_block( void *ptr, void *caller )
                 if ( block && block->addr == ptr ) {
                     list_del( &block->list );
                     mem_caller->total_size -= block->size;
+                    total_size -= block->size;
                     mem_caller->number--;
                     real_free( block );
                     total_blocks--;
