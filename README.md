@@ -11,6 +11,5 @@
 # 使用
 - 将sample拷贝到开发板某个路径下
 - 将libmemchk.so拷贝到开发板某个路径下，比如/tmp/libmemchk.so
-- export LD_PRELOAD=/tmp/libmemchk.so
-- ./sample
+- LD_PRELOAD=/tmp/libmemchk.so ./sample
 - 开启一个新的终端,执行killall -USR1 sample
