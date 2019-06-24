@@ -1,4 +1,4 @@
-// Last Update:2019-06-24 19:01:57
+// Last Update:2019-06-24 21:02:23
 /**
  * @file memchk.c
  * @brief 
@@ -52,6 +52,7 @@ typedef struct {
     int number;
     void *caller;
     struct list_head list;
+    int total_size;
 } mem_caller_t;
 
 static malloc_ptr real_malloc = NULL;
@@ -61,6 +62,7 @@ static calloc_ptr real_calloc = NULL;
 static struct list_head mem_caller_list;
 static int caller_index;
 static pthread_mutex_t mutex;
+static int total_blocks = 0;
 
 mem_caller_t *find_caller( void *caller );
 
@@ -80,10 +82,11 @@ static void sig_hanlder( int signo )
         return;
     }
 
-    printf("dump all leak memory(%d callers):\n", caller_index );
+    printf("dump all leak memory(%d callers %d blocks):\n", caller_index, total_blocks );
     list_for_each_entry( mem_caller, &mem_caller_list, list ) {
-        if ( mem_caller ) {
-            printf("\tcaller : %p number leak: %d\n", mem_caller->caller, mem_caller->number );
+        if ( mem_caller  && mem_caller->number > 1 ) {
+            printf("\tcaller : %p number leak: %d, total size : %d bytes\n",
+                   mem_caller->caller, mem_caller->number, mem_caller->total_size );
             list_for_each_entry( block, &mem_caller->block_list, list ) {
                 if ( block ) {
                    printf("\t\t%ld@%p\n", block->size, block->addr );
@@ -134,7 +137,9 @@ void record_block( void *ptr, size_t size, void *caller )
     memset( block, 0, sizeof(mem_block_t) );
     block->addr = ptr;
     block->size = size;
+    mem_caller->total_size += block->size;
     mem_caller->number ++;
+    total_blocks++;
     list_add_tail( &(block->list), &(mem_caller->block_list) );
     pthread_mutex_unlock( &mutex );
     DBG_TRACE_FUNC_OUT();
@@ -209,8 +214,10 @@ void delete_block( void *ptr, void *caller )
             list_for_each_entry( block, &mem_caller->block_list, list ) {
                 if ( block && block->addr == ptr ) {
                     list_del( &block->list );
-                    real_free( block );
+                    mem_caller->total_size -= block->size;
                     mem_caller->number--;
+                    real_free( block );
+                    total_blocks--;
                     pthread_mutex_unlock( &mutex );
                     DBG_TRACE_FUNC_OUT();
                     return;
