@@ -1,4 +1,4 @@
-// Last Update:2019-06-25 14:40:46
+// Last Update:2019-06-25 14:47:13
 /**
  * @file memchk.c
  * @brief 
@@ -135,7 +135,6 @@ void record_block( void *ptr, size_t size, void *caller )
         list_add_tail( &mem_caller->list, &mem_caller_list );
         INIT_LIST_HEAD( &mem_caller->block_list );
         caller_index++;
-        LOGI("caller_index = %d\n", caller_index);
     }
     mem_caller->caller = caller;
     block = (mem_block_t*)real_malloc( sizeof(mem_block_t) );
@@ -306,10 +305,10 @@ static void *monitor_task( void *arg )
                 if ( mem_caller->last_total_size ) {
                     if ( mem_caller->total_size > mem_caller->last_total_size ) {
                         LOGI("warning : caller %p increasing %d bytes increase count : %d\n",
-                             mem_caller->total_size - mem_caller->last_total_size, mem_caller->increase_count++ );
+                             mem_caller->caller, mem_caller->total_size - mem_caller->last_total_size, ++mem_caller->increase_count );
                     } 
-                    mem_caller->last_total_size = mem_caller->total_size;
                 }
+                mem_caller->last_total_size = mem_caller->total_size;
             }
         }
         pthread_mutex_unlock( &mutex );
