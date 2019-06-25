@@ -1,4 +1,4 @@
-// Last Update:2019-06-25 14:47:46
+// Last Update:2019-06-25 17:03:54
 /**
  * @file memchk.c
  * @brief 
@@ -58,6 +58,7 @@ typedef struct {
     struct list_head list;
     int total_size;
     int last_total_size;
+    int last_diff;
     int increase_count;
 } mem_caller_t;
 
@@ -290,6 +291,7 @@ void *realloc(void *ptr, size_t size)
 static void *monitor_task( void *arg )
 {
     mem_caller_t *mem_caller = NULL;
+    int diff;
 
     for (;;) {
         pthread_mutex_lock( &mutex );
@@ -301,12 +303,18 @@ static void *monitor_task( void *arg )
         list_for_each_entry( mem_caller, &mem_caller_list, list ) {
             if ( mem_caller ) {
                 if ( mem_caller->last_total_size ) {
-                    if ( mem_caller->total_size > mem_caller->last_total_size ) {
-                        LOGI("warning : caller %p increasing %d bytes increase count : %d\n",
-                             mem_caller->caller, mem_caller->total_size - mem_caller->last_total_size, ++mem_caller->increase_count );
-                    } 
+                    diff = mem_caller->total_size - mem_caller->last_total_size;
+                    if ( mem_caller->last_diff > 0  && diff > 0 ) {
+                        if ( diff > mem_caller->last_diff ) {
+                            LOGI("warning : caller %p increasing %d bytes increase count : %d\n",
+                                 mem_caller->caller, diff, ++mem_caller->increase_count );
+                        } 
+                    } else {
+                        mem_caller->last_diff = diff;
+                    }
+                } else {
+                    mem_caller->last_total_size = mem_caller->total_size;
                 }
-                mem_caller->last_total_size = mem_caller->total_size;
             }
         }
         pthread_mutex_unlock( &mutex );
