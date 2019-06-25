@@ -13,3 +13,7 @@
 - 将libmemchk.so拷贝到开发板某个路径下，比如/tmp/libmemchk.so
 - LD_PRELOAD=/tmp/libmemchk.so ./sample
 - 开启一个新的终端,执行killall -USR1 sample
+- 查看是哪个符号出现的内存泄漏：addr2line 0xxxx -f -e program
+
+# 作者
+- rigensen@qq.com
