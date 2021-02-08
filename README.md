@@ -16,4 +16,5 @@
 - 查看是哪个符号出现的内存泄漏：addr2line 0xxxx -f -e program
 
 # 作者
-- rigensen@qq.com
+- treeswayinwind@gmail.com
+- 企鹅：279191230
